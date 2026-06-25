@@ -8,26 +8,16 @@ export const categories: WordCategory[] = [
   {
     id: "places",
     title: "Places",
-    words: ["staifi", "esi", "bouraoui", "ma9am chahid" , "jardin d'essaie" ],
+    words: ["jama3 l'a3dam", "ramdan (fastfood)", "Epau" ],
   },
   {
     id: "food",
     title: "Food",
-    words: ["chekchouka", "couscous", "kasra & lbn", "mhajeb", "marini", "bouzalouf" , "bourak" , "9arantita" , "pizza caree"],
+    words: ["spagetti", "frite", "kessra mehchiya", "zlabiya", "milfeuille", "salade" , "bourak" , "9arantita" ],
   },
   {
     id: "objects",
     title: "Objects",
-    words: ["9aro", "farchita", "access point", "laptop", "sniper" , "keys" , "trophy" , "headset" , "ring"],
-  },
-  {
-    id: "people",
-    title: "people",
-    words: ["taki", "yacine", "uchiha", "bnd", "coatch", "sleepwell", "yanis", "abdo" ],
-  },
-  {
-    id: "wilayas",
-    title: "wilayas",
-    words: ["barika", "setif", "jijel", "constantine", "tebessa", "sidi bel abbes", "alger", "oran" , "biskra"],
-  },
+    words: ["manette", "glasses", "power bank", "bottle", "helmet" , "credit card" , "knife" , "phone case" , "rasberrypie"],
+  }
 ];
