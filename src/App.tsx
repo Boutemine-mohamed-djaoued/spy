@@ -1,15 +1,43 @@
-import { useState } from 'react'
-import { Eye, EyeOff, Minus, Play, Plus, RotateCcw, ShieldQuestion, Users } from 'lucide-react'
+import { useState, type FormEvent } from 'react'
+import {
+  Eye,
+  EyeOff,
+  Minus,
+  PencilLine,
+  Play,
+  Plus,
+  RotateCcw,
+  Send,
+  ShieldQuestion,
+  Users,
+} from 'lucide-react'
 import './App.css'
 import { categories } from './data/categories'
-import { createRound, type GameRound, type PlayerRole } from './game/createRound'
+import {
+  createRound,
+  createSubmittedRound,
+  type GameRound,
+  type PlayerRole,
+} from './game/createRound'
 
-type GameStage = 'setup' | 'handoff' | 'revealed'
+type GameStage = 'setup' | 'word-handoff' | 'word-entry' | 'handoff' | 'revealed'
+
+type SubmissionDraft = {
+  word: string
+  hint: string
+}
 
 const minPlayers = 3
 
 function clampImposters(imposterCount: number, playerCount: number) {
   return Math.min(Math.max(1, imposterCount), playerCount - 1)
+}
+
+function createEmptySubmissionDrafts(playerCount: number) {
+  return Array.from({ length: playerCount }, () => ({
+    word: '',
+    hint: '',
+  }))
 }
 
 function Stepper({
@@ -56,13 +84,15 @@ function Stepper({
   )
 }
 
-function RoleBadge({ role, categoryTitle }: { role: PlayerRole; categoryTitle: string }) {
+function RoleBadge({ role, clue }: { role: PlayerRole; clue: GameRound['clue'] }) {
   if (role.kind === 'spy') {
     return (
       <div className="role-badge spy">
         <ShieldQuestion size={34} strokeWidth={2.3} />
         <span>SPY</span>
-        <small>Category: {categoryTitle}</small>
+        <small>
+          {clue.label}: {clue.value}
+        </small>
       </div>
     )
   }
@@ -81,9 +111,18 @@ function App() {
   const [round, setRound] = useState<GameRound | null>(null)
   const [currentRoleIndex, setCurrentRoleIndex] = useState(0)
   const [stage, setStage] = useState<GameStage>('setup')
+  const [submissionDrafts, setSubmissionDrafts] = useState<SubmissionDraft[]>([])
+  const [currentSubmissionIndex, setCurrentSubmissionIndex] = useState(0)
+  const [formError, setFormError] = useState('')
 
   const currentRole = round?.roles[currentRoleIndex]
   const currentPlayerNumber = currentRoleIndex + 1
+  const currentSubmissionPlayerNumber = currentSubmissionIndex + 1
+  const currentDraft = submissionDrafts[currentSubmissionIndex] ?? {
+    word: '',
+    hint: '',
+  }
+  const isLastSubmission = currentSubmissionIndex === playerCount - 1
 
   function updatePlayerCount(nextPlayerCount: number) {
     const safePlayerCount = Math.max(minPlayers, nextPlayerCount)
@@ -96,7 +135,16 @@ function App() {
     setImposterCount(clampImposters(nextImposterCount, playerCount))
   }
 
-  function startRound() {
+  function resetToSetup() {
+    setRound(null)
+    setCurrentRoleIndex(0)
+    setSubmissionDrafts([])
+    setCurrentSubmissionIndex(0)
+    setFormError('')
+    setStage('setup')
+  }
+
+  function startRandomRound() {
     const nextRound = createRound({
       playerCount,
       imposterCount,
@@ -108,6 +156,74 @@ function App() {
     setStage('handoff')
   }
 
+  function startSubmittedWordMode() {
+    setSubmissionDrafts(createEmptySubmissionDrafts(playerCount))
+    setCurrentSubmissionIndex(0)
+    setFormError('')
+    setRound(null)
+    setStage('word-handoff')
+  }
+
+  function updateSubmissionDraft(field: keyof SubmissionDraft, value: string) {
+    setSubmissionDrafts((drafts) =>
+      drafts.map((draft, index) =>
+        index === currentSubmissionIndex
+          ? {
+              ...draft,
+              [field]: value,
+            }
+          : draft,
+      ),
+    )
+  }
+
+  function submitPlayerWord(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+
+    const trimmedDraft = {
+      word: currentDraft.word.trim(),
+      hint: currentDraft.hint.trim(),
+    }
+
+    if (!trimmedDraft.word || !trimmedDraft.hint) {
+      setFormError('Enter both a word and a hint.')
+      return
+    }
+
+    const nextDrafts = submissionDrafts.map((draft, index) =>
+      index === currentSubmissionIndex ? trimmedDraft : draft,
+    )
+
+    setSubmissionDrafts(nextDrafts)
+    setFormError('')
+
+    if (!isLastSubmission) {
+      setCurrentSubmissionIndex((index) => index + 1)
+      setStage('word-handoff')
+      return
+    }
+
+    try {
+      const nextRound = createSubmittedRound({
+        playerCount,
+        imposterCount,
+        submissions: nextDrafts.map((draft, index) => ({
+          playerNumber: index + 1,
+          word: draft.word,
+          hint: draft.hint,
+        })),
+      })
+
+      setRound(nextRound)
+      setSubmissionDrafts([])
+      setCurrentSubmissionIndex(0)
+      setCurrentRoleIndex(0)
+      setStage('handoff')
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : 'Could not start the round.')
+    }
+  }
+
   function hideAndContinue() {
     if (!round) {
       setStage('setup')
@@ -117,9 +233,7 @@ function App() {
     const nextIndex = currentRoleIndex + 1
 
     if (nextIndex >= round.roles.length) {
-      setRound(null)
-      setCurrentRoleIndex(0)
-      setStage('setup')
+      resetToSetup()
       return
     }
 
@@ -165,13 +279,84 @@ function App() {
                   {playerCount} players · {imposterCount} {imposterCount === 1 ? 'spy' : 'spies'}
                 </span>
               </div>
-              <p>Category and word are picked randomly every round.</p>
+              <p>Use the dataset, or collect one secret word and hint from every player.</p>
             </div>
 
-            <button type="button" className="primary-action" onClick={startRound}>
-              <Play size={21} fill="currentColor" strokeWidth={2.4} />
-              Start round
+            <div className="action-stack">
+              <button type="button" className="primary-action" onClick={startRandomRound}>
+                <Play size={21} fill="currentColor" strokeWidth={2.4} />
+                Random word
+              </button>
+              <button type="button" className="secondary-action" onClick={startSubmittedWordMode}>
+                <PencilLine size={21} strokeWidth={2.4} />
+                Player words
+              </button>
+            </div>
+          </>
+        )}
+
+        {stage === 'word-handoff' && (
+          <>
+            <header className="player-header">
+              <p className="eyebrow">Player {currentSubmissionPlayerNumber}</p>
+              <h1>Your word turn</h1>
+            </header>
+
+            <button type="button" className="reveal-button" onClick={() => setStage('word-entry')}>
+              <PencilLine size={42} strokeWidth={2.1} />
+              Enter word and hint
             </button>
+
+            <p className="privacy-note">Keep your word secret while typing.</p>
+
+            <button type="button" className="text-action" onClick={resetToSetup}>
+              Back to setup
+            </button>
+          </>
+        )}
+
+        {stage === 'word-entry' && (
+          <>
+            <header className="player-header">
+              <p className="eyebrow">Player {currentSubmissionPlayerNumber}</p>
+              <h1>Add your word</h1>
+            </header>
+
+            <form className="entry-form" onSubmit={submitPlayerWord}>
+              <label>
+                <span>Word</span>
+                <input
+                  value={currentDraft.word}
+                  onChange={(event) => updateSubmissionDraft('word', event.target.value)}
+                  maxLength={40}
+                  autoFocus
+                />
+              </label>
+
+              <label>
+                <span>Hint</span>
+                <input
+                  value={currentDraft.hint}
+                  onChange={(event) => updateSubmissionDraft('hint', event.target.value)}
+                  maxLength={40}
+                />
+              </label>
+
+              {formError && (
+                <p className="form-error" role="alert">
+                  {formError}
+                </p>
+              )}
+
+              <button type="submit" className="primary-action">
+                <Send size={21} strokeWidth={2.4} />
+                {isLastSubmission ? 'Start reveal pass' : 'Save and pass'}
+              </button>
+
+              <button type="button" className="secondary-action" onClick={resetToSetup}>
+                Cancel round
+              </button>
+            </form>
           </>
         )}
 
@@ -198,7 +383,7 @@ function App() {
               <h1>Your role</h1>
             </header>
 
-            <RoleBadge role={currentRole} categoryTitle={round.category.title} />
+            <RoleBadge role={currentRole} clue={round.clue} />
 
             <button type="button" className="primary-action" onClick={hideAndContinue}>
               <RotateCcw size={21} strokeWidth={2.4} />

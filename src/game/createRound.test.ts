@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { WordCategory } from '../data/categories'
-import { createRound } from './createRound'
+import { createRound, createSubmittedRound, type SubmittedWord } from './createRound'
 
 const testCategories: WordCategory[] = [
   {
@@ -12,6 +12,29 @@ const testCategories: WordCategory[] = [
     id: 'food',
     title: 'Food',
     words: ['Pizza', 'Sushi'],
+  },
+]
+
+const submittedWords: SubmittedWord[] = [
+  {
+    playerNumber: 1,
+    word: 'Train station',
+    hint: 'Place',
+  },
+  {
+    playerNumber: 2,
+    word: 'Watermelon',
+    hint: 'Food',
+  },
+  {
+    playerNumber: 3,
+    word: 'Headphones',
+    hint: 'Object',
+  },
+  {
+    playerNumber: 4,
+    word: 'Dentist',
+    hint: 'Job',
   },
 ]
 
@@ -112,5 +135,63 @@ describe('createRound', () => {
         categories: testCategories,
       }),
     ).toThrow('Imposters must be fewer than players.')
+  })
+})
+
+describe('createSubmittedRound', () => {
+  it('chooses one submitted word and exposes its hint as the clue', () => {
+    const round = createSubmittedRound({
+      playerCount: 4,
+      imposterCount: 1,
+      submissions: submittedWords,
+      random: sequenceRandom([0.3, 0]),
+    })
+
+    expect(round.word).toBe('Watermelon')
+    expect(round.clue).toEqual({
+      label: 'Hint',
+      value: 'Food',
+    })
+    expect(round.selectedWordPlayerNumber).toBe(2)
+  })
+
+  it('does not make the selected word owner a spy', () => {
+    const round = createSubmittedRound({
+      playerCount: 4,
+      imposterCount: 3,
+      submissions: submittedWords,
+      random: sequenceRandom([0.3, 0, 0.5, 0.99]),
+    })
+    const selectedOwnerRole = round.roles.find(
+      (role) => role.playerNumber === round.selectedWordPlayerNumber,
+    )
+
+    expect(selectedOwnerRole?.kind).toBe('player')
+    expect(round.roles.filter((role) => role.kind === 'spy')).toHaveLength(3)
+  })
+
+  it('rejects missing or empty submissions', () => {
+    expect(() =>
+      createSubmittedRound({
+        playerCount: 4,
+        imposterCount: 1,
+        submissions: submittedWords.slice(0, 3),
+      }),
+    ).toThrow('Every player must submit one word and hint.')
+
+    expect(() =>
+      createSubmittedRound({
+        playerCount: 4,
+        imposterCount: 1,
+        submissions: [
+          ...submittedWords.slice(0, 3),
+          {
+            playerNumber: 4,
+            word: '   ',
+            hint: 'Job',
+          },
+        ],
+      }),
+    ).toThrow('Every submission needs a word and hint.')
   })
 })
